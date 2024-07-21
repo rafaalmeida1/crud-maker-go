@@ -1,40 +1,41 @@
 package userhttp
 
 import (
-    "database/sql"
-    "net/http"
+	"database/sql"
 	"encoding/json"
-	_ "github.com/lib/pq"
-    "github.com/lib/pq"
-	"github.com/gorilla/mux"
 	"http/traits"
+	"net/http"
+
+	"github.com/gorilla/mux"
+	"github.com/lib/pq"
+	_ "github.com/lib/pq"
 )
 
 type User struct {
-    ID    int    `json:"id"`
-    Name  string `json:"name"`
-    Email string `json:"email"`
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
 func GetUsers(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-    rows, err := db.Query("SELECT id, name, email FROM users")
-    if err != nil {
-        traits.ErrorResponse(w, "Error to find users", http.StatusInternalServerError)
-        return
-    }
-    defer rows.Close()
+	rows, err := db.Query("SELECT id, name, email FROM users")
+	if err != nil {
+		traits.ErrorResponse(w, "Error to find users", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
 
-    var users []User
-    for rows.Next() {
-        var user User
-        if err := rows.Scan(&user.ID, &user.Name, &user.Email); err != nil {
-            traits.ErrorResponse(w, "Error to find users", http.StatusInternalServerError)
-            return
-        }
-        users = append(users, user)
-    }
+	var users []User
+	for rows.Next() {
+		var user User
+		if err := rows.Scan(&user.ID, &user.Name, &user.Email); err != nil {
+			traits.ErrorResponse(w, "Error to find users", http.StatusInternalServerError)
+			return
+		}
+		users = append(users, user)
+	}
 
-    traits.JsonResponse(w, users, "Users found", http.StatusOK)
+	traits.JsonResponse(w, users, "Users found", http.StatusOK)
 }
 
 func GetUser(w http.ResponseWriter, r *http.Request, db *sql.DB) {
@@ -59,7 +60,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	res, err := db.Exec("INSERT INTO users (name, email) VALUES ($1, $2)", newUser.Name, newUser.Email)
+	_, err := db.Exec("INSERT INTO users (name, email) VALUES ($1, $2)", newUser.Name, newUser.Email)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
 			traits.ErrorResponse(w, "User with this email already exists", http.StatusConflict)
@@ -69,13 +70,15 @@ func CreateUser(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	newUserID, err := res.LastInsertId()
-	if err != nil {
+	// get the last inserted id
+
+	row := db.QueryRow("SELECT id FROM users WHERE email = $1", newUser.Email)
+
+	if err := row.Scan(&newUser.ID); err != nil {
 		traits.ErrorResponse(w, "Error to create user", http.StatusInternalServerError)
 		return
 	}
 
-	newUser.ID = int(newUserID)
 	traits.JsonResponse(w, newUser, "User created", http.StatusCreated)
 }
 
